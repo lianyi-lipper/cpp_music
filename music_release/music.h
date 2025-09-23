@@ -4,12 +4,14 @@
 #include <conio.h>
 #include <mutex>
 #include <regex>
-#include <string.h>
+#include <string>
 #include <vector>
 #include <algorithm>
+#include <chrono>
 #include <fstream>
 #include <iostream>
 #include <assert.h>
+#include <stdexcept>
 #define DEBUG 0
 class MusicList{
 public:
@@ -28,7 +30,13 @@ public:
 	void readFile(std::string fileName=""){
 		clear();
 		std::ifstream in(fileName);
+        if (!in.is_open()) {
+            throw std::runtime_error("Could not open file: " + fileName);
+        }
 		in>>dctn;
+        if (in.fail()) {
+            throw std::runtime_error("Failed to read delay value from file: " + fileName);
+        }
 		std::string s;
 		while (getline(in,s)) add(s);
 		in.close();
@@ -72,9 +80,9 @@ private:
 	HMIDIOUT handle;
 	int dctn=500;
 	int volume=0x7f;
+    static const int BASE_DURATION_UNITS = 672;
 public:
 	bool ENDMUSIC=0;
-	int STOP;
 	MusicPlayer(){
 		midiOutOpen(&handle,0,0,0,CALLBACK_NULL);
 	}
@@ -87,15 +95,15 @@ public:
 	void setDelay(int _dctn){
 		dctn=_dctn;
 	}
-	std::mutex mu;
 	int ttag=0;
 	int tick1,tick2;
 	void play_single(std::string s,bool isMain){
 		std::vector <int> nbuf;
 		s=s+' ';int n=s.size();
-		int ctn=32*21,vol=volume;
+		int ctn=BASE_DURATION_UNITS,vol=volume;
 		bool isChord=0;nbuf.clear();
-		int st=clock(),tick=0;
+		auto st=std::chrono::high_resolution_clock::now();
+		int tick=0;
 		for (int i=0;i<n;++i){
 			if (ENDMUSIC) break;
 			char c=s[i];
@@ -114,7 +122,10 @@ public:
 					if (!isChord){
 						if (!nbuf.empty()){
 							for (int i=0;i<(int)nbuf.size();++i) if (nbuf[i]!=0) midiOutShortMsg(handle,nbuf[i]);nbuf.clear();
-							while ((clock()-st)*1000.0/CLOCKS_PER_SEC<dctn/32.0/21*(tick+ctn));tick+=ctn;ctn=32*21;			
+                            double target_ms = (double)dctn / BASE_DURATION_UNITS * (tick + ctn);
+                            auto target_time = st + std::chrono::duration<double, std::milli>(target_ms);
+                            std::this_thread::sleep_until(target_time);
+							tick+=ctn;ctn=BASE_DURATION_UNITS;
 						}
 					}
 					break;
@@ -141,7 +152,7 @@ public:
 					break;
 				}
 				case '-':{
-					ctn+=32*21;
+					ctn+=BASE_DURATION_UNITS;
 					break;
 				}
 				case '0':{
@@ -166,19 +177,17 @@ public:
 			}
 		}
 		if (isMain) tick1=tick;else tick2=tick;
-		mu.lock();
-		STOP++;
-		mu.unlock();
 		return;
 	}
 	void play(std::string s1,std::string s2=""){
-		STOP=0;tick1=0;tick2=0;
-		std::thread tune1(&MusicPlayer::play_single,this,s1,1);tune1.detach();
-		std::thread tune2(&MusicPlayer::play_single,this,s2,0);tune2.detach();
-		while (STOP<2);
+		tick1=0;tick2=0;
+		std::thread tune1(&MusicPlayer::play_single,this,s1,1);
+		std::thread tune2(&MusicPlayer::play_single,this,s2,0);
+		tune1.join();
+		tune2.join();
 		if (DEBUG){
 			if (tick1==tick2) puts("Succ");
-			else printf("Warn: %d!=%d\n",tick1,tick2);			
+			else printf("Warn: %d!=%d\n",tick1,tick2);
 		}
 	}
 	void playList(MusicList &m){
@@ -198,26 +207,35 @@ class BGM{
 public:
 	MusicPlayer player;
 	MusicList nowList;
+    std::thread bgm_thread;
 	BGM(std::string name,int volume=0x7f){
 		nowList.readFile(name);player.setVolume(volume);
 	}
 	~BGM(){
-		player.ENDMUSIC=1;
+        if (bgm_thread.joinable()) {
+            stop();
+        }
 	}
 	void setMusic(std::string name){
 		nowList.readFile(name);
 	}
 	void play_thread(){
 		while (1){
+            if (player.ENDMUSIC) break;
 			player.playList(nowList);
-			if (player.ENDMUSIC) break;	
 		}
 	}
 	void play(){
+		if (bgm_thread.joinable()) {
+			return;
+		}
 		player.ENDMUSIC=0;
-		std::thread bgm(&BGM::play_thread,this);bgm.detach();
+		bgm_thread = std::thread(&BGM::play_thread,this);
 	}
 	void stop(){
 		player.ENDMUSIC=1;
+        if (bgm_thread.joinable()) {
+            bgm_thread.join();
+        }
 	}
 };
