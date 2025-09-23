@@ -1,19 +1,3 @@
-/*
- * =====================================================================================
- *
- *       Filename:  music.cpp
- *
- *    Description:  An example program demonstrating the use of music.h library.
- *
- *        Version:  1.0
- *        Created:  2023/10/27 19:20:00
- *       Revision:  none
- *       Compiler:  g++
- *
- *         Author:  NorMir
- *
- * =====================================================================================
- */
 #include "music.h"
 #include <iostream>
 #include <string>
