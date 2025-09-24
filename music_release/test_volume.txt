@@ -1,0 +1,11 @@
+v = 80
+dctn = 400
+
+# Test individual note volumes
+4v127 4v100 4v80 4v60 4v40
+
+# Test sequential volume change
+1 1 5 5 v70 4 4 3 3 2 2 1
+
+# Test a mix of both
+v100 5 5 6v127 6 5 4v80 4 3 3 2 2 1

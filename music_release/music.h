@@ -19,6 +19,7 @@
 class MusicList {
 public:
     int dctn = 500;
+    int volume = 0x7f; // Default volume
     std::vector<std::string> vec;
 
     ~MusicList() {}
@@ -42,19 +43,28 @@ public:
             throw std::runtime_error("Could not open file: " + fileName);
         }
 
-        in >> dctn;
-        if (in.fail()) {
-            throw std::runtime_error("Failed to read delay value from file: " + fileName);
+        std::string line;
+        std::regex settings_regex(R"(\s*([a-zA-Z]+)\s*=\s*(\d+)\s*)");
+        std::smatch match;
+
+        while (getline(in, line)) {
+            if (std::regex_match(line, match, settings_regex)) {
+                std::string key = match[1];
+                int value = std::stoi(match[2]);
+                if (key == "v" || key == "volume") {
+                    volume = value;
+                } else if (key == "dctn" || key == "delay") {
+                    dctn = value;
+                }
+            } else {
+                // First non-setting line
+                add(line);
+                break;
+            }
         }
 
-        // --- 优化点 ---
-        // 消耗掉读取 dctn 后剩余的换行符，为 getline 做准备
-        in.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-
-        std::string s;
-        while (getline(in, s)) {
-            // 修正：不再忽略文件中的空行，以支持多重旋律判定
-            add(s);
+        while (getline(in, line)) {
+            add(line);
         }
         in.close();
     }
@@ -128,7 +138,8 @@ public:
     void play_single(std::string s, bool isMain) {
         std::vector <int> nbuf;
         s = s + ' '; int n = s.size();
-        int ctn = BASE_DURATION_UNITS, vol = volume;
+        int ctn = BASE_DURATION_UNITS;
+        int current_vol = volume;
         bool isChord = 0; nbuf.clear();
         auto st = std::chrono::high_resolution_clock::now();
         int tick = 0;
@@ -159,6 +170,19 @@ public:
                 break;
             }
             case '|':break;
+            case 'v': {
+                int vel = 0;
+                int j = i + 1;
+                while (j < n && isdigit(s[j])) {
+                    vel = vel * 10 + (s[j] - '0');
+                    j++;
+                }
+                if (j > i + 1) {
+                    current_vol = std::min(127, std::max(0, vel));
+                    i = j - 1;
+                }
+                break;
+            }
             case '_': {
                 ctn /= 2;
                 break;
@@ -191,15 +215,34 @@ public:
                 if (c >= '1' && c <= '7') {
                     int x = (int)c - 49, lvl = 3;
                     bool isSharp = 0;
-                    for (int j = i + 1; j < n; ++j) {
+                    int temp_vol = -1;
+
+                    int j = i + 1;
+                    while (j < n) {
                         if (s[j] == '^') lvl++;
                         else if (s[j] == ',') lvl--;
                         else if (s[j] == '#') isSharp = 1;
+                        else if (s[j] == 'v') {
+                            int vel = 0;
+                            int k = j + 1;
+                            while (k < n && isdigit(s[k])) {
+                                vel = vel * 10 + (s[k] - '0');
+                                k++;
+                            }
+                            if (k > j + 1) {
+                                temp_vol = std::min(127, std::max(0, vel));
+                                j = k - 1;
+                            }
+                        }
                         else break;
-                        i++;
+                        j++;
                     }
-                    if (isSharp) nbuf.push_back((vol << 16) + (C_Scale_s[lvl][x] << 8) + 0x90);
-                    else nbuf.push_back((vol << 16) + (C_Scale[lvl][x] << 8) + 0x90);
+                    i = j -1;
+
+                    int final_vol = (temp_vol != -1) ? temp_vol : current_vol;
+
+                    if (isSharp) nbuf.push_back((final_vol << 16) + (C_Scale_s[lvl][x] << 8) + 0x90);
+                    else nbuf.push_back((final_vol << 16) + (C_Scale[lvl][x] << 8) + 0x90);
                 }
                 break;
             }
@@ -220,7 +263,9 @@ public:
         }
     }
     void playList(MusicList& m) {
-        dctn = m.dctn; ENDMUSIC = 0;
+        dctn = m.dctn;
+        volume = m.volume;
+        ENDMUSIC = 0;
         for (int i = 0; i < (int)m.vec.size() && !ENDMUSIC; ++i) {
             // 修正：跳过空行，以实现多重旋律的中断
             if (m.vec[i].empty()) {
