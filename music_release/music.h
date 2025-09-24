@@ -299,10 +299,19 @@ public:
             case ' ': {
                 if (!isChord) {
                     if (!nbuf.empty()) {
-                        for (int i = 0; i < (int)nbuf.size(); ++i) if (nbuf[i] != 0) midiOutShortMsg(handle, nbuf[i]); nbuf.clear();
+                        for (int i = 0; i < (int)nbuf.size(); ++i) if (nbuf[i] != 0) midiOutShortMsg(handle, nbuf[i]);
+
                         double target_ms = (double)dctn / BASE_DURATION_UNITS * (tick + ctn);
                         auto target_time = st + std::chrono::duration<double, std::milli>(target_ms);
                         std::this_thread::sleep_until(target_time);
+
+                        for (int i = 0; i < (int)nbuf.size(); ++i) {
+                            if (nbuf[i] != 0) {
+                                // Send Note Off by sending Note On with 0 velocity
+                                midiOutShortMsg(handle, (nbuf[i] & 0x00FFFF) | (0 << 16));
+                            }
+                        }
+                        nbuf.clear();
                         tick += ctn; ctn = BASE_DURATION_UNITS;
                     }
                 }
