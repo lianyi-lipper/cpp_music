@@ -377,31 +377,18 @@ public:
                 if (c >= '1' && c <= '7') {
                     int x = (int)c - 49, lvl = 3;
                     bool isSharp = 0;
-                    int temp_vol = -1;
 
                     int j = i + 1;
                     while (j < n) {
                         if (s[j] == '^') lvl++;
                         else if (s[j] == ',') lvl--;
                         else if (s[j] == '#') isSharp = 1;
-                        else if (s[j] == 'v') {
-                            int vel = 0;
-                            int k = j + 1;
-                            while (k < n && isdigit(s[k])) {
-                                vel = vel * 10 + (s[k] - '0');
-                                k++;
-                            }
-                            if (k > j + 1) {
-                                temp_vol = std::min(127, std::max(0, vel));
-                                j = k - 1;
-                            }
-                        }
                         else break;
                         j++;
                     }
                     i = j -1;
 
-                    int final_vol = (temp_vol != -1) ? temp_vol : current_vol;
+                    int final_vol = current_vol;
 
                     if (isSharp) nbuf.push_back((final_vol << 16) + (C_Scale_s[lvl][x] << 8) + 0x90);
                     else nbuf.push_back((final_vol << 16) + (C_Scale[lvl][x] << 8) + 0x90);
