@@ -2,7 +2,6 @@
 #include <iostream>
 #include <string>
 #include <vector>
-#include <conio.h>
 
 // A simple function to demonstrate BGM playback
 void some_other_functions(){

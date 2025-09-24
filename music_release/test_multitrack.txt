@@ -1,0 +1,29 @@
+# Test file for the new multi-track sequencer engine
+
+# Global settings
+dctn = 700
+
+# Channel 0 settings (Right-hand Piano)
+0.instrument = piano
+0.volume = 120
+
+# Channel 1 settings (Left-hand Bass)
+1.instrument = acousticbass
+1.volume = 100
+
+# First playback block (two tracks)
+4_ 4_ 4_ 4_
+2,^ 2,^ 2,^ 2,^
+
+# Empty line signifies the end of a block
+
+# Second block (single track, piano only)
+5_ 5_ 5_ 5_
+
+
+# Change channel 1's instrument mid-score
+1.instrument = stringensemble1
+
+# Third block (two tracks, bass is now strings)
+4_ 4_ 4_ 4_
+2,^ 2,^ 2,^ 2,^

@@ -1,4 +1,5 @@
 #pragma once
+
 #include <Windows.h>
 #include <thread>
 #include <conio.h>
@@ -20,8 +21,9 @@
 class MusicList {
 public:
     int dctn = 500;
-    int volume = 0x7f; // Default volume
-    std::string instrument_name = "piano"; // Default instrument
+    int volume = 127; // Default global volume
+    std::string instrument_name = "piano"; // Default global instrument
+    std::map<int, std::map<std::string, std::string>> channel_settings;
     std::vector<std::string> vec;
 
     MusicList(std::string fileName = "") {
@@ -37,6 +39,7 @@ public:
 
     void clear() {
         vec.clear();
+        channel_settings.clear();
     }
 
     void setDelay(int _dctn) {
@@ -51,34 +54,62 @@ public:
         }
 
         std::string line;
-        std::regex settings_regex(R"(\s*([a-zA-Z]+)\s*=\s*([a-zA-Z0-9]+)\s*)");
+        // Regex for global settings like "dctn = 500"
+        std::regex global_setting_regex(R"(\s*([a-zA-Z]+)\s*=\s*(.+)\s*)");
+        // Regex for channel settings like "0.instrument = piano"
+        std::regex channel_setting_regex(R"(\s*(\d+)\s*\.\s*([a-zA-Z]+)\s*=\s*(.+)\s*)");
         std::smatch match;
 
+        // Phase 1: Parse header for settings
         while (getline(in, line)) {
             // Trim whitespace from line
             line.erase(0, line.find_first_not_of(" \t\n\r"));
             line.erase(line.find_last_not_of(" \t\n\r") + 1);
-            if (line.empty()) continue;
 
-            if (std::regex_match(line, match, settings_regex)) {
-                std::string key = match[1];
-                std::string value_str = match[2];
-                if (key == "v" || key == "volume") {
-                    volume = std::stoi(value_str);
-                } else if (key == "dctn" || key == "delay") {
-                    dctn = std::stoi(value_str);
-                } else if (key == "instrument") {
-                    instrument_name = value_str;
-                    // The player will be responsible for validating and mapping this name to an ID.
+            if (line.empty() || line[0] == '#') {
+                continue; // Skip comments and empty lines in the header
+            }
+
+            bool is_setting = false;
+            // Check for channel-specific settings: e.g., "0.instrument = piano"
+            if (std::regex_match(line, match, channel_setting_regex)) {
+                is_setting = true;
+                int channel_id = std::stoi(match[1]);
+                if (channel_id >= 0 && channel_id < 16) {
+                    std::string key = match[2];
+                    std::string value = match[3];
+                    std::transform(key.begin(), key.end(), key.begin(), ::tolower);
+                    channel_settings[channel_id][key] = value;
                 }
-            } else {
-                // First non-setting line
+            }
+            // Check for global settings: e.g., "dctn = 600"
+            else if (std::regex_match(line, match, global_setting_regex)) {
+                std::string key = match[1];
+                std::string value = match[2];
+                std::transform(key.begin(), key.end(), key.begin(), ::tolower);
+
+                if (key == "dctn" || key == "delay") {
+                    dctn = std::stoi(value);
+                    is_setting = true;
+                } else if (key == "volume" || key == "v") {
+                    volume = std::stoi(value);
+                    is_setting = true;
+                } else if (key == "instrument") {
+                    instrument_name = value;
+                    is_setting = true;
+                }
+            }
+
+            if (!is_setting) {
+                // This is the first line of music, so add it and break the settings loop
                 add(line);
                 break;
             }
         }
 
+        // Phase 2: Read the rest of the file as the music score
         while (getline(in, line)) {
+            // We don't trim here, to preserve indentation if it's meaningful
             add(line);
         }
         in.close();
@@ -96,6 +127,11 @@ bool isNumeric(std::string const& str) {
         return false;
     }
 }
+
+struct ChannelState {
+    int instrument_id = 0; // Default to piano
+    int volume = 100;      // Default volume
+};
 
 class MusicPlayer {
 private:
@@ -127,98 +163,73 @@ private:
                                 {C7s,D7s,-1,F7s,G7s,A7s,-1} };
     HMIDIOUT handle;
     int dctn = 500;
-    int volume = 0x7f;
-    int instrument = 0;
-    int channel = 0;
+    ChannelState channels[16];
     static const std::map<std::string, int> instrument_map;
     static const int BASE_DURATION_UNITS = 672;
 public:
     bool ENDMUSIC = 0;
     MusicPlayer() {
         midiOutOpen(&handle, 0, 0, 0, CALLBACK_NULL);
-        setInstrument(instrument);
+        // Initialize channels with default instruments and volumes
+        for (int i = 0; i < 16; ++i) {
+            channels[i] = ChannelState(); // Reset to default
+        }
     }
     ~MusicPlayer() {
         midiOutClose(handle);
     }
-    void setVolume(int _vol) {
-        volume = _vol;
+    void setVolume(int channel, int _vol) {
+        if (channel < 0 || channel >= 16) return;
+        channels[channel].volume = _vol;
+        // MIDI Volume is a controller message (0xB0), controller 7
+        // midiOutShortMsg(handle, 0xB0 | channel | (7 << 8) | (_vol << 16));
     }
     void setDelay(int _dctn) {
         dctn = _dctn;
     }
-    void setInstrument(int instrument_id) {
-        instrument = instrument_id;
+    void setInstrument(int channel, int instrument_id) {
+        if (channel < 0 || channel >= 16) return;
+        channels[channel].instrument_id = instrument_id;
         // Program Change: 0xC0 | channel, instrument
-        midiOutShortMsg(handle, (instrument << 8) | (0xC0 | channel));
+        midiOutShortMsg(handle, (instrument_id << 8) | (0xC0 | channel));
     }
-    int ttag = 0;
-    int tick1, tick2;
-    void play_single(std::string s, bool isMain) {
-        std::vector <int> nbuf;
+    void play_single(std::string s, int channel_id) {
+        if (channel_id < 0 || channel_id >= 16) return;
+
+        std::vector<DWORD> nbuf; // Store full MIDI messages
         s = s + ' '; int n = s.size();
         int ctn = BASE_DURATION_UNITS;
-        int current_vol = volume;
+        int current_vol = channels[channel_id].volume; // Use channel-specific volume
         bool isChord = 0; nbuf.clear();
         auto st = std::chrono::high_resolution_clock::now();
         int tick = 0;
+
         for (int i = 0; i < n; ++i) {
             if (ENDMUSIC) break;
             char c = s[i];
             switch (c) {
-            case '[':case '{': {
-                if (s.substr(i, 12) == "[instrument=") {
-                    int j = i + 12;
-                    std::string instrument_name = "";
-                    while (j < n && s[j] != ']') {
-                        instrument_name += s[j];
-                        j++;
-                    }
-                    if (j < n) { // found closing ']'
-                        std::transform(instrument_name.begin(), instrument_name.end(), instrument_name.begin(), ::tolower);
-                        if (instrument_map.count(instrument_name)) {
-                            setInstrument(instrument_map.at(instrument_name));
-                        }
-                        i = j; // Move past the instrument command
-                    }
-                } else if (s.substr(i, 6) == "[dctn=") {
-                    int j = i + 6;
-                    std::string dctn_val_str = "";
-                    while (j < n && isdigit(s[j])) {
-                        dctn_val_str += s[j];
-                        j++;
-                    }
-                    if (j < n && s[j] == ']') { // check for closing bracket
-                        if (!dctn_val_str.empty()) {
-                            this->dctn = std::stoi(dctn_val_str);
-                        }
-                        i = j; // Move pointer past the command
-                    }
-                }
-                else {
-                    assert(isChord == 0);
-                    isChord = 1;
-                }
+            case '[': case '{': // Handles chords
+                assert(isChord == 0);
+                isChord = 1;
                 break;
-            }
-            case ']':case '}': {
+            case ']': case '}': // Handles chords
                 assert(isChord == 1);
                 isChord = 0;
                 break;
-            }
             case ' ': {
                 if (!isChord) {
                     if (!nbuf.empty()) {
-                        for (int i = 0; i < (int)nbuf.size(); ++i) if (nbuf[i] != 0) midiOutShortMsg(handle, nbuf[i]);
+                        for (const auto& msg : nbuf) {
+                            if (msg != Rest) midiOutShortMsg(handle, msg);
+                        }
 
                         double target_ms = (double)dctn / BASE_DURATION_UNITS * (tick + ctn);
                         auto target_time = st + std::chrono::duration<double, std::milli>(target_ms);
                         std::this_thread::sleep_until(target_time);
 
-                        for (int i = 0; i < (int)nbuf.size(); ++i) {
-                            if (nbuf[i] != 0) {
-                                // Send Note Off by sending Note On with 0 velocity
-                                midiOutShortMsg(handle, (nbuf[i] & 0x00FFFF) | (0 << 16));
+                        for (const auto& msg : nbuf) {
+                            if (msg != Rest) {
+                                midiOutShortMsg(handle, (msg & 0xFF00FFFF) | (0 << 16));
                             }
                         }
                         nbuf.clear();
@@ -227,8 +238,8 @@ public:
                 }
                 break;
             }
-            case '|':break;
-            case 'v': {
+            case '|': break;
+            case 'v': { // Per-note velocity override
                 int vel = 0;
                 int j = i + 1;
                 while (j < n && isdigit(s[j])) {
@@ -241,30 +252,13 @@ public:
                 }
                 break;
             }
-            case '_': {
-                ctn /= 2;
-                break;
-            }
-            case '*': {
-                ctn /= 3;
-                break;
-            }
-            case '&': {
-                ctn /= 7;
-                break;
-            }
-            case '%': {
-                ctn /= 5;
-                break;
-            }
-            case '.': {
-                ctn *= 1.5;
-                break;
-            }
-            case '-': {
-                ctn += BASE_DURATION_UNITS;
-                break;
-            }
+            // Duration modifiers
+            case '_': ctn /= 2; break;
+            case '*': ctn /= 3; break;
+            case '&': ctn /= 7; break;
+            case '%': ctn /= 5; break;
+            case '.': ctn *= 1.5; break;
+            case '-': ctn += BASE_DURATION_UNITS; break;
             case '0': {
                 nbuf.push_back(Rest);
                 break;
@@ -273,7 +267,6 @@ public:
                 if (c >= '1' && c <= '7') {
                     int x = (int)c - 49, lvl = 3;
                     bool isSharp = 0;
-
                     int j = i + 1;
                     while (j < n) {
                         if (s[j] == '^') lvl++;
@@ -282,65 +275,151 @@ public:
                         else break;
                         j++;
                     }
-                    i = j -1;
+                    i = j - 1;
 
-                    int final_vol = current_vol;
-
-                    if (isSharp) nbuf.push_back((final_vol << 16) + (C_Scale_s[lvl][x] << 8) + 0x90);
-                    else nbuf.push_back((final_vol << 16) + (C_Scale[lvl][x] << 8) + 0x90);
+                    int note_val = isSharp ? C_Scale_s[lvl][x] : C_Scale[lvl][x];
+                    if (note_val != -1) { // Check for invalid sharps, e.g., E#
+                        DWORD midi_msg = (current_vol << 16) | (note_val << 8) | (0x90 | channel_id);
+                        nbuf.push_back(midi_msg);
+                    }
                 }
                 break;
             }
             }
         }
-        if (isMain) tick1 = tick; else tick2 = tick;
         return;
     }
-    void play(std::string s1, std::string s2 = "") {
-        tick1 = 0; tick2 = 0;
-        std::thread tune1(&MusicPlayer::play_single, this, s1, 1);
-        std::thread tune2(&MusicPlayer::play_single, this, s2, 0);
-        tune1.join();
-        tune2.join();
-        if (DEBUG) {
-            if (tick1 == tick2) puts("Succ");
-            else printf("Warn: %d!=%d\n", tick1, tick2);
+    void playTracks(const std::vector<std::string>& tracks) {
+        if (tracks.empty()) {
+            return;
+        }
+
+        std::vector<std::thread> track_threads;
+        int channel_id = 0;
+        for (const auto& track_line : tracks) {
+            if (channel_id >= 16) {
+                break;
+            }
+            track_threads.emplace_back(&MusicPlayer::play_single, this, track_line, channel_id);
+            channel_id++;
+        }
+
+        for (auto& t : track_threads) {
+            if (t.joinable()) {
+                t.join();
+            }
         }
     }
     void playList(MusicList& m) {
-        dctn = m.dctn;
-        volume = m.volume;
+        // 1. Initial Configuration
+        this->dctn = m.dctn; // Set global delay from music list
 
-        // Look up the instrument ID from the name provided by the MusicList
-        std::string instrument_name_lower = m.instrument_name;
-        std::transform(instrument_name_lower.begin(), instrument_name_lower.end(), instrument_name_lower.begin(), ::tolower);
-
-        int id_to_set = 0; // Default to piano
-        if (instrument_map.count(instrument_name_lower)) {
-            id_to_set = instrument_map.at(instrument_name_lower);
+        // Apply global defaults to all channels first
+        std::string default_instrument_name = m.instrument_name;
+        std::transform(default_instrument_name.begin(), default_instrument_name.end(), default_instrument_name.begin(), ::tolower);
+        int default_inst_id = 0;
+        if (instrument_map.count(default_instrument_name)) {
+            default_inst_id = instrument_map.at(default_instrument_name);
         }
-        setInstrument(id_to_set);
+        for (int i = 0; i < 16; ++i) {
+            setInstrument(i, default_inst_id);
+            setVolume(i, m.volume);
+        }
+
+        // Override with channel-specific settings from the header
+        for (const auto& pair : m.channel_settings) {
+            int channel_id = pair.first;
+            const auto& settings = pair.second;
+            if (settings.count("instrument")) {
+                std::string inst_name = settings.at("instrument");
+                std::transform(inst_name.begin(), inst_name.end(), inst_name.begin(), ::tolower);
+                if (instrument_map.count(inst_name)) {
+                    setInstrument(channel_id, instrument_map.at(inst_name));
+                }
+            }
+            if (settings.count("volume")) {
+                try {
+                    setVolume(channel_id, std::stoi(settings.at("volume")));
+                } catch (const std::invalid_argument& ia) {
+                    // Handle error or ignore
+                }
+            }
+        }
 
         ENDMUSIC = 0;
-        for (int i = 0; i < (int)m.vec.size() && !ENDMUSIC; ++i) {
-            // 修正：跳过空行，以实现多重旋律的中断
-            if (m.vec[i].empty()) {
+        std::vector<std::string> current_block;
+
+        // Regexes for parsing mid-score settings
+        std::regex channel_setting_regex(R"(\s*(\d+)\s*\.\s*([a-zA-Z]+)\s*=\s*(.+)\s*)");
+        std::regex global_setting_regex(R"(\s*([a-zA-Z]+)\s*=\s*(.+)\s*)");
+        std::smatch match;
+
+        // 2. Block Processing Loop
+        for (const auto& line : m.vec) {
+            if (ENDMUSIC) break;
+
+            std::string trimmed_line = line;
+            trimmed_line.erase(0, trimmed_line.find_first_not_of(" \t\n\r"));
+            trimmed_line.erase(trimmed_line.find_last_not_of(" \t\n\r") + 1);
+
+            if (trimmed_line.rfind('#', 0) == 0) { // Skip comment lines
                 continue;
             }
 
-            // 处理数字行（延迟）
-            if (isNumeric(m.vec[i])) {
-                setDelay(stoi(m.vec[i]));
-                continue;
+            bool is_setting = false;
+            if (std::regex_match(trimmed_line, match, channel_setting_regex)) {
+                is_setting = true;
+                // Play the block of music before applying new settings
+                if (!current_block.empty()) {
+                    playTracks(current_block);
+                    current_block.clear();
+                }
+                // Now, apply the setting
+                int channel_id = std::stoi(match[1]);
+                if (channel_id >= 0 && channel_id < 16) {
+                    std::string key = match[2];
+                    std::string value = match[3];
+                    std::transform(key.begin(), key.end(), key.begin(), ::tolower);
+                    if (key == "instrument") {
+                        std::transform(value.begin(), value.end(), value.begin(), ::tolower);
+                        if (instrument_map.count(value)) {
+                            setInstrument(channel_id, instrument_map.at(value));
+                        }
+                    } else if (key == "volume") {
+                        try {
+                            setVolume(channel_id, std::stoi(value));
+                        } catch (const std::invalid_argument& ia) {}
+                    }
+                }
+            } else if (std::regex_match(trimmed_line, match, global_setting_regex)) {
+                std::string key = match[1];
+                std::string value = match[2];
+                std::transform(key.begin(), key.end(), key.begin(), ::tolower);
+                if (key == "dctn" || key == "delay") {
+                    is_setting = true;
+                    if (!current_block.empty()) {
+                        playTracks(current_block);
+                        current_block.clear();
+                    }
+                    try {
+                        setDelay(std::stoi(value));
+                    } catch (const std::invalid_argument& ia) {}
+                }
             }
 
-            std::string s1 = m.vec[i], s2 = "";
-            // 修正：检查下一行是否是有效的第二轨道（非空且非数字）
-            if (i + 1 < (int)m.vec.size() && !m.vec[i + 1].empty() && !isNumeric(m.vec[i + 1])) {
-                s2 = m.vec[i + 1];
-                i++; // 跳过下一行，因为它已经被用作第二轨道
+            if (trimmed_line.empty()) { // An empty line marks the end of a block
+                if (!current_block.empty()) {
+                    playTracks(current_block);
+                    current_block.clear();
+                }
+            } else if (!is_setting) { // It's a music line
+                current_block.push_back(trimmed_line);
             }
-            play(s1, s2);
+        }
+
+        // Play the final block if the file doesn't end with an empty line
+        if (!current_block.empty() && !ENDMUSIC) {
+            playTracks(current_block);
         }
     }
 };
@@ -454,7 +533,8 @@ public:
     std::thread bgm_thread;
 
     BGM(std::string name, int volume = 0x7f) {
-        nowList.readFile(name); player.setVolume(volume);
+        nowList.readFile(name);
+        nowList.volume = volume; // Set default volume in the list, playList will apply it
     }
     ~BGM() {
         if (bgm_thread.joinable()) {
