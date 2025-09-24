@@ -13,6 +13,7 @@
 #include <assert.h>
 #include <stdexcept>
 #include <limits> // 用于 std::numeric_limits
+#include <map>
 
 #define DEBUG 0
 
@@ -20,7 +21,114 @@ class MusicList {
 public:
     int dctn = 500;
     int volume = 0x7f; // Default volume
+    int instrument = 0; // Default instrument: piano
     std::vector<std::string> vec;
+    std::map<std::string, int> instrument_map;
+
+    MusicList(std::string fileName = "") {
+        instrument_map["piano"] = 0;
+        instrument_map["acousticgrand"] = 0;
+        instrument_map["brightacoustic"] = 1;
+        instrument_map["electricgrand"] = 2;
+        instrument_map["honkytonk"] = 3;
+        instrument_map["electricpiano1"] = 4;
+        instrument_map["electricpiano2"] = 5;
+        instrument_map["harpsichord"] = 6;
+        instrument_map["clav"] = 7;
+        instrument_map["celesta"] = 8;
+        instrument_map["glockenspiel"] = 9;
+        instrument_map["musicbox"] = 10;
+        instrument_map["vibraphone"] = 11;
+        instrument_map["marimba"] = 12;
+        instrument_map["xylophone"] = 13;
+        instrument_map["tubularbells"] = 14;
+        instrument_map["dulcimer"] = 15;
+        instrument_map["drawbarorgan"] = 16;
+        instrument_map["percussiveorgan"] = 17;
+        instrument_map["rockorgan"] = 18;
+        instrument_map["churchorgan"] = 19;
+        instrument_map["reedorgan"] = 20;
+        instrument_map["accordion"] = 21;
+        instrument_map["harmonica"] = 22;
+        instrument_map["concertina"] = 23;
+        instrument_map["guitar"] = 25;
+        instrument_map["acousticguitarnylon"] = 24;
+        instrument_map["acousticguitarsteel"] = 25;
+        instrument_map["electricguitarjazz"] = 26;
+        instrument_map["electricguitarclean"] = 27;
+        instrument_map["electricguitarmuted"] = 28;
+        instrument_map["overdrivenguitar"] = 29;
+        instrument_map["distortedguitar"] = 30;
+        instrument_map["guitarharmonics"] = 31;
+        instrument_map["acousticbass"] = 32;
+        instrument_map["electricbassfinger"] = 33;
+        instrument_map["electricbasspick"] = 34;
+        instrument_map["fretlessbass"] = 35;
+        instrument_map["slapbass1"] = 36;
+        instrument_map["slapbass2"] = 37;
+        instrument_map["synthbass1"] = 38;
+        instrument_map["synthbass2"] = 39;
+        instrument_map["violin"] = 40;
+        instrument_map["viola"] = 41;
+        instrument_map["cello"] = 42;
+        instrument_map["contrabass"] = 43;
+        instrument_map["tremolostrings"] = 44;
+        instrument_map["pizzicatostrings"] = 45;
+        instrument_map["orchestralharp"] = 46;
+        instrument_map["timpani"] = 47;
+        instrument_map["stringensemble1"] = 48;
+        instrument_map["stringensemble2"] = 49;
+        instrument_map["synthstrings1"] = 50;
+        instrument_map["synthstrings2"] = 51;
+        instrument_map["choiraahs"] = 52;
+        instrument_map["voiceoohs"] = 53;
+        instrument_map["synthvoice"] = 54;
+        instrument_map["orchestrahit"] = 55;
+        instrument_map["trumpet"] = 56;
+        instrument_map["trombone"] = 57;
+        instrument_map["tuba"] = 58;
+        instrument_map["mutedtrumpet"] = 59;
+        instrument_map["frenchhorn"] = 60;
+        instrument_map["brasssection"] = 61;
+        instrument_map["synthbrass1"] = 62;
+        instrument_map["synthbrass2"] = 63;
+        instrument_map["sopranosax"] = 64;
+        instrument_map["altosax"] = 65;
+        instrument_map["tenorsax"] = 66;
+        instrument_map["baritonesax"] = 67;
+        instrument_map["oboe"] = 68;
+        instrument_map["englishhorn"] = 69;
+        instrument_map["bassoon"] = 70;
+        instrument_map["clarinet"] = 71;
+        instrument_map["piccolo"] = 72;
+        instrument_map["flute"] = 73;
+        instrument_map["recorder"] = 74;
+        instrument_map["panflute"] = 75;
+        instrument_map["blownbottle"] = 76;
+        instrument_map["shakuhachi"] = 77;
+        instrument_map["whistle"] = 78;
+        instrument_map["ocarina"] = 79;
+        instrument_map["lead1square"] = 80;
+        instrument_map["lead2sawtooth"] = 81;
+        instrument_map["lead3calliope"] = 82;
+        instrument_map["lead4chiff"] = 83;
+        instrument_map["lead5charang"] = 84;
+        instrument_map["lead6voice"] = 85;
+        instrument_map["lead7fifths"] = 86;
+        instrument_map["lead8basslead"] = 87;
+        instrument_map["pad1newage"] = 88;
+        instrument_map["pad2warm"] = 89;
+        instrument_map["pad3polysynth"] = 90;
+        instrument_map["pad4choir"] = 91;
+        instrument_map["pad5bowed"] = 92;
+        instrument_map["pad6metallic"] = 93;
+        instrument_map["pad7halo"] = 94;
+        instrument_map["pad8sweep"] = 95;
+        instrument_map["fx1rain"] = 96;
+.
+        vec.clear();
+        if (fileName != "") readFile(fileName);
+    }
 
     ~MusicList() {}
 
@@ -44,17 +152,28 @@ public:
         }
 
         std::string line;
-        std::regex settings_regex(R"(\s*([a-zA-Z]+)\s*=\s*(\d+)\s*)");
+        std::regex settings_regex(R"(\s*([a-zA-Z]+)\s*=\s*([a-zA-Z0-9]+)\s*)");
         std::smatch match;
 
         while (getline(in, line)) {
+            // Trim whitespace from line
+            line.erase(0, line.find_first_not_of(" \t\n\r"));
+            line.erase(line.find_last_not_of(" \t\n\r") + 1);
+            if (line.empty()) continue;
+
             if (std::regex_match(line, match, settings_regex)) {
                 std::string key = match[1];
-                int value = std::stoi(match[2]);
+                std::string value_str = match[2];
                 if (key == "v" || key == "volume") {
-                    volume = value;
+                    volume = std::stoi(value_str);
                 } else if (key == "dctn" || key == "delay") {
-                    dctn = value;
+                    dctn = std::stoi(value_str);
+                } else if (key == "instrument") {
+                    std::string instrument_name = value_str;
+                    std::transform(instrument_name.begin(), instrument_name.end(), instrument_name.begin(), ::tolower);
+                    if (instrument_map.count(instrument_name)) {
+                        instrument = instrument_map[instrument_name];
+                    }
                 }
             } else {
                 // First non-setting line
@@ -67,11 +186,6 @@ public:
             add(line);
         }
         in.close();
-    }
-
-    MusicList(std::string fileName = "") {
-        vec.clear();
-        if (fileName != "") readFile(fileName);
     }
 };
 
@@ -118,11 +232,15 @@ private:
     HMIDIOUT handle;
     int dctn = 500;
     int volume = 0x7f;
+    int instrument = 0;
+    int channel = 0;
+    std::map<std::string, int> instrument_map;
     static const int BASE_DURATION_UNITS = 672;
 public:
     bool ENDMUSIC = 0;
     MusicPlayer() {
         midiOutOpen(&handle, 0, 0, 0, CALLBACK_NULL);
+        setInstrument(instrument);
     }
     ~MusicPlayer() {
         midiOutClose(handle);
@@ -132,6 +250,11 @@ public:
     }
     void setDelay(int _dctn) {
         dctn = _dctn;
+    }
+    void setInstrument(int instrument_id) {
+        instrument = instrument_id;
+        // Program Change: 0xC0 | channel, instrument
+        midiOutShortMsg(handle, (instrument << 8) | (0xC0 | channel));
     }
     int ttag = 0;
     int tick1, tick2;
@@ -148,8 +271,24 @@ public:
             char c = s[i];
             switch (c) {
             case '[':case '{': {
-                assert(isChord == 0);
-                isChord = 1;
+                if (s.substr(i, 12) == "[instrument=") {
+                    int j = i + 12;
+                    std::string instrument_name = "";
+                    while (j < n && s[j] != ']') {
+                        instrument_name += s[j];
+                        j++;
+                    }
+                    if (j < n) { // found closing ']'
+                        std::transform(instrument_name.begin(), instrument_name.end(), instrument_name.begin(), ::tolower);
+                        if (instrument_map.count(instrument_name)) {
+                            setInstrument(instrument_map[instrument_name]);
+                        }
+                        i = j; // Move past the instrument command
+                    }
+                } else {
+                    assert(isChord == 0);
+                    isChord = 1;
+                }
                 break;
             }
             case ']':case '}': {
@@ -265,6 +404,9 @@ public:
     void playList(MusicList& m) {
         dctn = m.dctn;
         volume = m.volume;
+        instrument = m.instrument;
+        instrument_map = m.instrument_map;
+        setInstrument(instrument);
         ENDMUSIC = 0;
         for (int i = 0; i < (int)m.vec.size() && !ENDMUSIC; ++i) {
             // 修正：跳过空行，以实现多重旋律的中断
