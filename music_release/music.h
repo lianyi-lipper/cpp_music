@@ -177,7 +177,7 @@ public:
                     if (j < n) { // found closing ']'
                         std::transform(instrument_name.begin(), instrument_name.end(), instrument_name.begin(), ::tolower);
                         if (instrument_map.count(instrument_name)) {
-                            setInstrument(instrument_map[instrument_name]);
+                            setInstrument(instrument_map.at(instrument_name));
                         }
                         i = j; // Move past the instrument command
                     }
