@@ -125,7 +125,7 @@ public:
         instrument_map["pad7halo"] = 94;
         instrument_map["pad8sweep"] = 95;
         instrument_map["fx1rain"] = 96;
-.
+
         vec.clear();
         if (fileName != "") readFile(fileName);
     }
@@ -253,11 +253,8 @@ public:
     }
     void setInstrument(int instrument_id) {
         instrument = instrument_id;
-        // All Notes Off MIDI message
-        // Controller 123 (0x7B)
-        midiOutShortMsg(handle, (0 << 16) | (123 << 8) | (0xB0 | channel));
         // Program Change: 0xC0 | channel, instrument
-        midiOutShortMsg(handle, (instrument_id << 8) | (0xC0 | channel));
+        midiOutShortMsg(handle, (instrument << 8) | (0xC0 | channel));
     }
     int ttag = 0;
     int tick1, tick2;
