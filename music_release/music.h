@@ -53,10 +53,8 @@ public:
 
         std::string s;
         while (getline(in, s)) {
-            // 忽略文件中的空行
-            if (!s.empty()) {
-                add(s);
-            }
+            // 修正：不再忽略文件中的空行，以支持多重旋律判定
+            add(s);
         }
         in.close();
     }
@@ -224,15 +222,20 @@ public:
     void playList(MusicList& m) {
         dctn = m.dctn; ENDMUSIC = 0;
         for (int i = 0; i < (int)m.vec.size() && !ENDMUSIC; ++i) {
-            // 由于 readFile 已经优化，这里的逻辑可以简化
+            // 修正：跳过空行，以实现多重旋律的中断
+            if (m.vec[i].empty()) {
+                continue;
+            }
+
+            // 处理数字行（延迟）
             if (isNumeric(m.vec[i])) {
                 setDelay(stoi(m.vec[i]));
-                continue; // 跳到下一行
+                continue;
             }
-            
+
             std::string s1 = m.vec[i], s2 = "";
-            // 检查下一行是否是第二轨道
-            if (i + 1 < (int)m.vec.size() && !isNumeric(m.vec[i + 1])) {
+            // 修正：检查下一行是否是有效的第二轨道（非空且非数字）
+            if (i + 1 < (int)m.vec.size() && !m.vec[i + 1].empty() && !isNumeric(m.vec[i + 1])) {
                 s2 = m.vec[i + 1];
                 i++; // 跳过下一行，因为它已经被用作第二轨道
             }
