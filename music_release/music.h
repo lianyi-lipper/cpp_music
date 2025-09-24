@@ -285,7 +285,21 @@ public:
                         }
                         i = j; // Move past the instrument command
                     }
-                } else {
+                } else if (s.substr(i, 6) == "[dctn=") {
+                    int j = i + 6;
+                    std::string dctn_val_str = "";
+                    while (j < n && isdigit(s[j])) {
+                        dctn_val_str += s[j];
+                        j++;
+                    }
+                    if (j < n && s[j] == ']') { // check for closing bracket
+                        if (!dctn_val_str.empty()) {
+                            this->dctn = std::stoi(dctn_val_str);
+                        }
+                        i = j; // Move pointer past the command
+                    }
+                }
+                else {
                     assert(isChord == 0);
                     isChord = 1;
                 }
