@@ -21,111 +21,10 @@ class MusicList {
 public:
     int dctn = 500;
     int volume = 0x7f; // Default volume
-    int instrument = 0; // Default instrument: piano
+    std::string instrument_name = "piano"; // Default instrument
     std::vector<std::string> vec;
-    std::map<std::string, int> instrument_map;
 
     MusicList(std::string fileName = "") {
-        instrument_map["piano"] = 0;
-        instrument_map["acousticgrand"] = 0;
-        instrument_map["brightacoustic"] = 1;
-        instrument_map["electricgrand"] = 2;
-        instrument_map["honkytonk"] = 3;
-        instrument_map["electricpiano1"] = 4;
-        instrument_map["electricpiano2"] = 5;
-        instrument_map["harpsichord"] = 6;
-        instrument_map["clav"] = 7;
-        instrument_map["celesta"] = 8;
-        instrument_map["glockenspiel"] = 9;
-        instrument_map["musicbox"] = 10;
-        instrument_map["vibraphone"] = 11;
-        instrument_map["marimba"] = 12;
-        instrument_map["xylophone"] = 13;
-        instrument_map["tubularbells"] = 14;
-        instrument_map["dulcimer"] = 15;
-        instrument_map["drawbarorgan"] = 16;
-        instrument_map["percussiveorgan"] = 17;
-        instrument_map["rockorgan"] = 18;
-        instrument_map["churchorgan"] = 19;
-        instrument_map["reedorgan"] = 20;
-        instrument_map["accordion"] = 21;
-        instrument_map["harmonica"] = 22;
-        instrument_map["concertina"] = 23;
-        instrument_map["guitar"] = 25;
-        instrument_map["acousticguitarnylon"] = 24;
-        instrument_map["acousticguitarsteel"] = 25;
-        instrument_map["electricguitarjazz"] = 26;
-        instrument_map["electricguitarclean"] = 27;
-        instrument_map["electricguitarmuted"] = 28;
-        instrument_map["overdrivenguitar"] = 29;
-        instrument_map["distortedguitar"] = 30;
-        instrument_map["guitarharmonics"] = 31;
-        instrument_map["acousticbass"] = 32;
-        instrument_map["electricbassfinger"] = 33;
-        instrument_map["electricbasspick"] = 34;
-        instrument_map["fretlessbass"] = 35;
-        instrument_map["slapbass1"] = 36;
-        instrument_map["slapbass2"] = 37;
-        instrument_map["synthbass1"] = 38;
-        instrument_map["synthbass2"] = 39;
-        instrument_map["violin"] = 40;
-        instrument_map["viola"] = 41;
-        instrument_map["cello"] = 42;
-        instrument_map["contrabass"] = 43;
-        instrument_map["tremolostrings"] = 44;
-        instrument_map["pizzicatostrings"] = 45;
-        instrument_map["orchestralharp"] = 46;
-        instrument_map["timpani"] = 47;
-        instrument_map["stringensemble1"] = 48;
-        instrument_map["stringensemble2"] = 49;
-        instrument_map["synthstrings1"] = 50;
-        instrument_map["synthstrings2"] = 51;
-        instrument_map["choiraahs"] = 52;
-        instrument_map["voiceoohs"] = 53;
-        instrument_map["synthvoice"] = 54;
-        instrument_map["orchestrahit"] = 55;
-        instrument_map["trumpet"] = 56;
-        instrument_map["trombone"] = 57;
-        instrument_map["tuba"] = 58;
-        instrument_map["mutedtrumpet"] = 59;
-        instrument_map["frenchhorn"] = 60;
-        instrument_map["brasssection"] = 61;
-        instrument_map["synthbrass1"] = 62;
-        instrument_map["synthbrass2"] = 63;
-        instrument_map["sopranosax"] = 64;
-        instrument_map["altosax"] = 65;
-        instrument_map["tenorsax"] = 66;
-        instrument_map["baritonesax"] = 67;
-        instrument_map["oboe"] = 68;
-        instrument_map["englishhorn"] = 69;
-        instrument_map["bassoon"] = 70;
-        instrument_map["clarinet"] = 71;
-        instrument_map["piccolo"] = 72;
-        instrument_map["flute"] = 73;
-        instrument_map["recorder"] = 74;
-        instrument_map["panflute"] = 75;
-        instrument_map["blownbottle"] = 76;
-        instrument_map["shakuhachi"] = 77;
-        instrument_map["whistle"] = 78;
-        instrument_map["ocarina"] = 79;
-        instrument_map["lead1square"] = 80;
-        instrument_map["lead2sawtooth"] = 81;
-        instrument_map["lead3calliope"] = 82;
-        instrument_map["lead4chiff"] = 83;
-        instrument_map["lead5charang"] = 84;
-        instrument_map["lead6voice"] = 85;
-        instrument_map["lead7fifths"] = 86;
-        instrument_map["lead8basslead"] = 87;
-        instrument_map["pad1newage"] = 88;
-        instrument_map["pad2warm"] = 89;
-        instrument_map["pad3polysynth"] = 90;
-        instrument_map["pad4choir"] = 91;
-        instrument_map["pad5bowed"] = 92;
-        instrument_map["pad6metallic"] = 93;
-        instrument_map["pad7halo"] = 94;
-        instrument_map["pad8sweep"] = 95;
-        instrument_map["fx1rain"] = 96;
-
         vec.clear();
         if (fileName != "") readFile(fileName);
     }
@@ -169,11 +68,8 @@ public:
                 } else if (key == "dctn" || key == "delay") {
                     dctn = std::stoi(value_str);
                 } else if (key == "instrument") {
-                    std::string instrument_name = value_str;
-                    std::transform(instrument_name.begin(), instrument_name.end(), instrument_name.begin(), ::tolower);
-                    if (instrument_map.count(instrument_name)) {
-                        instrument = instrument_map[instrument_name];
-                    }
+                    instrument_name = value_str;
+                    // The player will be responsible for validating and mapping this name to an ID.
                 }
             } else {
                 // First non-setting line
@@ -234,7 +130,7 @@ private:
     int volume = 0x7f;
     int instrument = 0;
     int channel = 0;
-    std::map<std::string, int> instrument_map;
+    static const std::map<std::string, int> instrument_map;
     static const int BASE_DURATION_UNITS = 672;
 public:
     bool ENDMUSIC = 0;
@@ -414,9 +310,17 @@ public:
     void playList(MusicList& m) {
         dctn = m.dctn;
         volume = m.volume;
-        instrument = m.instrument;
-        instrument_map = m.instrument_map;
-        setInstrument(instrument);
+
+        // Look up the instrument ID from the name provided by the MusicList
+        std::string instrument_name_lower = m.instrument_name;
+        std::transform(instrument_name_lower.begin(), instrument_name_lower.end(), instrument_name_lower.begin(), ::tolower);
+
+        int id_to_set = 0; // Default to piano
+        if (instrument_map.count(instrument_name_lower)) {
+            id_to_set = instrument_map.at(instrument_name_lower);
+        }
+        setInstrument(id_to_set);
+
         ENDMUSIC = 0;
         for (int i = 0; i < (int)m.vec.size() && !ENDMUSIC; ++i) {
             // 修正：跳过空行，以实现多重旋律的中断
@@ -439,6 +343,108 @@ public:
             play(s1, s2);
         }
     }
+};
+
+const std::map<std::string, int> MusicPlayer::instrument_map = {
+    {"piano", 0},
+    {"acousticgrand", 0},
+    {"brightacoustic", 1},
+    {"electricgrand", 2},
+    {"honkytonk", 3},
+    {"electricpiano1", 4},
+    {"electricpiano2", 5},
+    {"harpsichord", 6},
+    {"clav", 7},
+    {"celesta", 8},
+    {"glockenspiel", 9},
+    {"musicbox", 10},
+    {"vibraphone", 11},
+    {"marimba", 12},
+    {"xylophone", 13},
+    {"tubularbells", 14},
+    {"dulcimer", 15},
+    {"drawbarorgan", 16},
+    {"percussiveorgan", 17},
+    {"rockorgan", 18},
+    {"churchorgan", 19},
+    {"reedorgan", 20},
+    {"accordion", 21},
+    {"harmonica", 22},
+    {"concertina", 23},
+    {"guitar", 25},
+    {"acousticguitarnylon", 24},
+    {"acousticguitarsteel", 25},
+    {"electricguitarjazz", 26},
+    {"electricguitarclean", 27},
+    {"electricguitarmuted", 28},
+    {"overdrivenguitar", 29},
+    {"distortedguitar", 30},
+    {"guitarharmonics", 31},
+    {"acousticbass", 32},
+    {"electricbassfinger", 33},
+    {"electricbasspick", 34},
+    {"fretlessbass", 35},
+    {"slapbass1", 36},
+    {"slapbass2", 37},
+    {"synthbass1", 38},
+    {"synthbass2", 39},
+    {"violin", 40},
+    {"viola", 41},
+    {"cello", 42},
+    {"contrabass", 43},
+    {"tremolostrings", 44},
+    {"pizzicatostrings", 45},
+    {"orchestralharp", 46},
+    {"timpani", 47},
+    {"stringensemble1", 48},
+    {"stringensemble2", 49},
+    {"synthstrings1", 50},
+    {"synthstrings2", 51},
+    {"choiraahs", 52},
+    {"voiceoohs", 53},
+    {"synthvoice", 54},
+    {"orchestrahit", 55},
+    {"trumpet", 56},
+    {"trombone", 57},
+    {"tuba", 58},
+    {"mutedtrumpet", 59},
+    {"frenchhorn", 60},
+    {"brasssection", 61},
+    {"synthbrass1", 62},
+    {"synthbrass2", 63},
+    {"sopranosax", 64},
+    {"altosax", 65},
+    {"tenorsax", 66},
+    {"baritonesax", 67},
+    {"oboe", 68},
+    {"englishhorn", 69},
+    {"bassoon", 70},
+    {"clarinet", 71},
+    {"piccolo", 72},
+    {"flute", 73},
+    {"recorder", 74},
+    {"panflute", 75},
+    {"blownbottle", 76},
+    {"shakuhachi", 77},
+    {"whistle", 78},
+    {"ocarina", 79},
+    {"lead1square", 80},
+    {"lead2sawtooth", 81},
+    {"lead3calliope", 82},
+    {"lead4chiff", 83},
+    {"lead5charang", 84},
+    {"lead6voice", 85},
+    {"lead7fifths", 86},
+    {"lead8basslead", 87},
+    {"pad1newage", 88},
+    {"pad2warm", 89},
+    {"pad3polysynth", 90},
+    {"pad4choir", 91},
+    {"pad5bowed", 92},
+    {"pad6metallic", 93},
+    {"pad7halo", 94},
+    {"pad8sweep", 95},
+    {"fx1rain", 96}
 };
 
 class BGM {
